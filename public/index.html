@@ -63,5 +63,12 @@ $('ref').onclick=async()=>{const u=store.get('srv')||'/api/refresh';
   d.updated='aggiornato alle '+new Date().toLocaleTimeString('it',{hour:'2-digit',minute:'2-digit'});DATA=d;store.set('data',d);draw()}
  catch(e){if(!$('st1').textContent.startsWith('Il server'))$('st1').textContent='Aggiornamento non riuscito: riprova'}
  $('ref').disabled=false;$('ref').textContent='Aggiorna quote'};
-draw();
+async function fromHash(){const m=location.hash.match(/^#ppg=([gj])(.+)$/);if(!m)return;
+ try{let b=m[2].replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';
+  const bytes=Uint8Array.from(atob(b),c=>c.charCodeAt(0));
+  const txt=m[1]==='g'?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text():new TextDecoder().decode(bytes);
+  const ms=JSON.parse(txt).m.map(r=>({home:r[0],away:r[1],ph:r[2],pa:r[3]}));
+  if(ms.length)store.set('ppg',{date:today(),matches:ms})}catch(e){}
+ try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+fromHash().then(draw,draw);
 </script></body></html>
