@@ -29,12 +29,17 @@ th,td{text-align:left;padding:3px 4px;border-top:1px solid var(--bd)}th{color:va
 const SNAP={"updated":"","matches":[]};
 const $=id=>document.getElementById(id), today=()=>new Date().toLocaleDateString('sv');
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const STOP=new Set(['fc','cf','sc','ac','afc','fk','cd','ud','de','the','club']);
-const norm=n=>n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w&&!STOP.has(w)).join(' ');
+const STOP=new Set(['fc','cf','sc','ac','afc','fk','cd','ud','de','the','club','nk','sk','ik','il','if','bk','gk','kf','ks','sv','as','ss','us','sd','ca','cs','rc','fotball','fotboll','football','futbol','calcio']);
+const norm=n=>{let s=n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\(w\)|\bwomen\b|\bfemminile\b/g,' w ')
+ .replace(/([a-z])(u\d\d)\b/g,'$1 $2').replace(/\bu[ -]?(\d\d)\b/g,' u$1 ').replace(/[^a-z0-9 ]/g,' ');
+ const t=s.split(/\s+/).filter(Boolean).map(w=>({b:'ii','2':'ii',res:'ii',reserves:'ii'}[w]||w)),k=t.filter(w=>!STOP.has(w));return (k.length?k:t).join(' ')};
 const NC=new Map(),nn=s=>{let v=NC.get(s);if(v===undefined){v=norm(s);NC.set(s,v)}return v};
-function sim(a,b){a=nn(a);b=nn(b);const m=a.length,n=b.length;if(!m||!n||Math.abs(m-n)>Math.max(m,n)*.2)return 0;let p=Array.from({length:n+1},(_,j)=>j);
+function sim(a,b){a=nn(a);b=nn(b);if(a===b)return 1;const A=a.split(' '),B=b.split(' '),[s,l]=A.length<=B.length?[A,B]:[B,A];
+ if(s.length&&s.length<l.length&&s.every(w=>l.includes(w))&&s.some(w=>w.length>=4)&&l.filter(w=>!s.includes(w)).every(w=>!/^(u\d\d|ii|w)$/.test(w)))return .9;
+ const m=a.length,n=b.length;if(!m||!n||Math.abs(m-n)>Math.max(m,n)*.2)return 0;let p=Array.from({length:n+1},(_,j)=>j);
  for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return 1-p[n]/Math.max(m,n)}
-function find(m,L){let b=null,t=.7999;for(const p of L){const s1=sim(m.home,p.home);if(s1<t)continue;const s=Math.min(s1,sim(m.away,p.away));if(s>t){b=p;t=s}}return b}
+function find(m,L){let b=null,t=.7999;const tr=(p,sw)=>{const s1=sim(m.home,sw?p.away:p.home);if(s1<t)return;const s=Math.min(s1,sim(m.away,sw?p.home:p.away));if(s>t){b=sw?{...p,ph:p.pa,pa:p.ph}:p;t=s}};
+ for(const p of L){tr(p,0);tr(p,1)}return b}
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let DATA=store.get('data')||SNAP,TAB=store.get('tab')||'live',ONLY=store.get('onlyp')===true;
 const cards=(y,r)=>(y?' 🟨'+y:'')+(r?' 🟥'+r:'');
