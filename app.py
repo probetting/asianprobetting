@@ -1,3 +1,5 @@
+import re
+
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify
@@ -20,7 +22,12 @@ def build(pages):
         if not soup.find('table', id='tablematch1'):
             errors[kind] = f'tabelle non trovate ({len(html)} byte)'
             continue
-        for m in parse_asian(soup):
+        ms = parse_asian(soup)
+        if not ms:
+            n1 = len(soup.find('table', id='tablematch1').find_all('tr'))
+            n2 = len(soup.find('table', id='tablematch2').find_all('tr')) if soup.find('table', id='tablematch2') else 0
+            errors[kind] = f'tabelle vuote (righe {n1}/{n2}, {len(html)} byte)'
+        for m in ms:
             m['kind'] = kind
             matches.append(m)
     return {'matches': matches, 'errors': errors}
@@ -46,3 +53,22 @@ def refresh():
     resp = jsonify(fetch_all())
     resp.headers['Cache-Control'] = 'no-store'
     return resp
+
+
+@app.route('/api/debug')
+def debug():
+    """Diagnostica: mostra cosa riceve il server e dove la pagina prende i dati."""
+    out = {}
+    for kind, url in URLS.items():
+        try:
+            r = requests.get(url, headers=HDR, timeout=20)
+            t = r.text
+            i = t.find('id="tablematch1"')
+            out[kind] = dict(
+                status=r.status_code, bytes=len(t),
+                tabella=t[max(i - 20, 0):i + 500] if i >= 0 else None,
+                script_src=re.findall(r'<script[^>]+src=["\']([^"\']+)', t)[:15],
+                url_nei_script=sorted(set(re.findall(r'["\'](/?[\w./-]+\.(?:php|json|aspx|ashx|txt|xml)[^"\']{0,60})["\']', t)))[:25])
+        except Exception as e:
+            out[kind] = {'errore': str(e)[:150]}
+    return jsonify(out)
