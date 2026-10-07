@@ -159,3 +159,23 @@ def refresh():
     resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day'))))
     resp.headers['Cache-Control'] = 'no-store'
     return resp
+
+
+@app.route('/api/debug-ppg')
+def debug_ppg():
+    """Prova a leggere probettinghub dal server e mostra da dove prende i dati."""
+    url = 'https://probettinghub.com/it/pro-finder'
+    out = {}
+    try:
+        r = requests.get(url, headers=HDR, timeout=25)
+        t = r.text
+        out.update(status=r.status_code, bytes=len(t), titolo=(re.search(r'<title[^>]*>(.*?)</title>', t, re.S) or [None, ''])[1].strip()[:120],
+                   server=r.headers.get('server'), cloudflare='cf-ray' in r.headers)
+        out['indizi'] = {k: t.count(k) for k in ['__NEXT_DATA__', 'self.__next_f', 'application/json', '<table', 'ppg', 'PPG']}
+        out['script_src'] = re.findall(r'<script[^>]+src=["\']([^"\']+)', t)[:12]
+        out['url_api'] = sorted(set(re.findall(r'["\'](https?://[^"\'\s<>]*(?:api|supabase|graphql|firebase|rest)[^"\'\s<>]*|/api/[^"\'\s<>]*)', t)))[:15]
+        m = re.search(r'ppg', t, re.I)
+        out['intorno_ppg'] = t[max(m.start() - 200, 0):m.start() + 300] if m else None
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
