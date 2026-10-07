@@ -98,3 +98,25 @@ def debug2():
     except Exception as e:
         out['errore'] = str(e)[:150]
     return jsonify(out)
+
+
+@app.route('/api/debug3')
+def debug3():
+    """Cerca nella pagina i blocchi grandi che potrebbero contenere i dati dei match."""
+    page = requests.get(URLS['live'], headers=HDR, timeout=20).text
+    cand = []
+    for m in re.finditer(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', page, re.S):
+        if len(m.group(1)) > 300:
+            cand.append(('script', m.start(), m.group(1)))
+    for m in re.finditer(r'"([^"\n]{1500,})"|\'([^\'\n]{1500,})\'', page):
+        cand.append(('stringa lunga', m.start(), m.group(1) or m.group(2)))
+    for m in re.finditer(r'<textarea[^>]*>(.*?)</textarea>', page, re.S):
+        if len(m.group(1)) > 300:
+            cand.append(('textarea', m.start(), m.group(1)))
+    for m in re.finditer(r'<input[^>]*value=["\']([^"\']{300,})', page):
+        cand.append(('input nascosto', m.start(), m.group(1)))
+    cand.sort(key=lambda c: -len(c[2]))
+    return jsonify(dict(
+        bytes=len(page),
+        blocchi=[dict(tipo=t, posizione=p, lunghezza=len(s), inizio=s[:250].strip(), fine=s[-100:].strip())
+                 for t, p, s in cand[:6]]))
