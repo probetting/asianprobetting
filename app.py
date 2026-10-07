@@ -235,3 +235,33 @@ def debug7():
     except Exception as e:
         out['errore'] = str(e)[:150]
     return jsonify(out)
+
+
+@app.route('/api/debug8')
+def debug8():
+    """Mostra quali funzioni del sito riempiono la tabella e una chiamata d'esempio con i dati."""
+    import time
+    from collections import Counter
+    from urllib.parse import urljoin
+    out = {}
+    try:
+        soup = BeautifulSoup(requests.get(URLS['live'], headers=HDR, timeout=20).text, 'lxml')
+        book = soup.find(id='book_filter').find('option')['value']
+        st = soup.find(id='stats_filter').find('option')['value']
+        u = f'https://botbot3.space/tables/v4/{st}/livegame/{book}.js?date={int(time.time()) * 1000}'
+        js = requests.get(u, headers={**HDR, 'Referer': 'https://www.asianbetsoccer.com/'}, timeout=20).text
+        tf = requests.get(urljoin(URLS['live'], '/settings/tablefunc.v5.book.min.js'), headers=HDR, timeout=20).text
+        defined = {m.group(1): m.group(2) for m in re.finditer(r'function\s+(\w+)\s*\(([^)]*)\)', tf)}
+        cnt = Counter(n for n in re.findall(r'\b(\w+)\(', js) if n in defined)
+        out['chiamate_funzioni_del_sito'] = dict(cnt.most_common(12))
+        out['firme'] = {n: defined[n][:500] for n, _ in cnt.most_common(6)}
+        big = [n for n, _ in cnt.most_common() if len(defined[n].split(',')) >= 8][:2]
+        out['esempi'] = {}
+        for n in big:
+            i = js.find(n + '(')
+            j = js.find(');', i)
+            out['esempi'][n] = js[i:min(j + 2, i + 1600)]
+        out['bytes'] = len(js)
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
