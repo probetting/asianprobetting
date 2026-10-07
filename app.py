@@ -72,3 +72,29 @@ def debug():
         except Exception as e:
             out[kind] = {'errore': str(e)[:150]}
     return jsonify(out)
+
+
+@app.route('/api/debug2')
+def debug2():
+    """Cerca nei file JavaScript del sito da dove prende i dati la tabella."""
+    from urllib.parse import urljoin
+    pat = re.compile(r'ajax|\.get\(|\.post\(|getJSON|fetch\(|XMLHttpRequest|WebSocket|EventSource|\.php|\.aspx|\.ashx|\.json', re.I)
+    out = {}
+    base = URLS['live']
+    try:
+        page = requests.get(base, headers=HDR, timeout=20).text
+        files = [s for s in re.findall(r'<script[^>]+src=["\']([^"\']+)', page) if s.startswith('/') and 'cookie' not in s.lower()]
+        for f in files:
+            js = requests.get(urljoin(base, f), headers=HDR, timeout=20).text
+            hits, end = [], 0
+            for m in pat.finditer(js):
+                if m.start() < end:
+                    continue
+                a, end = max(m.start() - 120, 0), m.end() + 120
+                hits.append(js[a:end])
+                if len(hits) >= 12:
+                    break
+            out[f] = dict(bytes=len(js), tracce=hits)
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
