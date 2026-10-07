@@ -120,3 +120,36 @@ def debug3():
         bytes=len(page),
         blocchi=[dict(tipo=t, posizione=p, lunghezza=len(s), inizio=s[:250].strip(), fine=s[-100:].strip())
                  for t, p, s in cand[:6]]))
+
+
+@app.route('/api/debug4')
+def debug4():
+    """Cerca nei file JS come viene riempita tablematch1 e quali percorsi/file vengono richiamati."""
+    from urllib.parse import urljoin
+    base = URLS['live']
+    pats = {'tablematch1': r'tablematch1', 'load': r'\.load\(', 'getScript': r'getScript', 'createElement': r'createElement\(.{0,3}script',
+            'send': r'\.send\(', 'importScripts': r'importScripts|new Worker'}
+    path = re.compile(r'["\']([\w./?=&:-]*(?:\.(?:php|js|json|txt|xml|csv|html|asp|aspx|ashx|gz|bin)|/[\w-]+/)[\w./?=&-]{0,40})["\']')
+    out = {}
+    try:
+        page = requests.get(base, headers=HDR, timeout=20).text
+        files = [s for s in re.findall(r'<script[^>]+src=["\']([^"\']+)', page) if s.startswith('/') and 'cookie' not in s.lower()]
+        for f in files:
+            js = requests.get(urljoin(base, f), headers=HDR, timeout=20).text
+            res = {}
+            for name, p in pats.items():
+                hits, end = [], 0
+                for m in re.finditer(p, js):
+                    if m.start() < end:
+                        continue
+                    a, end = max(m.start() - 200, 0), m.end() + 200
+                    hits.append(js[a:end])
+                    if len(hits) >= (5 if name == 'tablematch1' else 2):
+                        break
+                if hits:
+                    res[name] = hits
+            res['percorsi'] = sorted(set(path.findall(js)))[:40]
+            out[f] = res
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
