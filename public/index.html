@@ -47,10 +47,10 @@ function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),sc=m.hg!==''?' · '+esc(m.hg)+'
 <tr><td>PPG</td><td colspan=2 class=ppg>${p?esc(p.ph)+' – '+esc(p.pa):'non trovato'}</td></tr></table></article>`}
 function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[],P=DATA.matches.map(m=>find(m,L));
  const shown=k=>DATA.matches.map((m,i)=>[m,P[i]]).filter(([m,p])=>m.kind===k&&(!ONLY||p));
- $('tl').textContent='Live ('+shown('live').length+')';$('tn').textContent='Domani ('+shown('next').length+')';
+ $('tl').textContent='Live ('+shown('live').length+')';$('tn').textContent='Prossimi ('+shown('next').length+')';
  $('tl').className=TAB==='live'?'on':'';$('tn').className=TAB==='next'?'on':'';
  $('onlyp').className='sec'+(ONLY?' on':'');$('onlyp').textContent=ONLY?'Solo con PPG: sì':'Solo con PPG: no';
- const rows=shown(TAB);let h=`<h2>${TAB==='live'?'Live':'Match di domani'} (${rows.length})</h2>`,last=null;
+ const rows=shown(TAB);let h=`<h2>${TAB==='live'?'Live':'Prossimi di oggi'} (${rows.length})</h2>`,last=null;
  for(const [m,p] of rows){if(m.league!==last){last=m.league;h+=`<h3>${esc(last)}</h3>`}h+=card(m,p)}
  if(!rows.length)h+='<p class=sub>Nessun match da mostrare.</p>';
  $('out').innerHTML=h;
