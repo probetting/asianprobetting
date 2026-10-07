@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+VERSIONE = 'v5'
 
 SITE = 'https://www.asianbetsoccer.com'
 DATA = 'https://botbot3.space/tables/v4'
@@ -102,27 +103,45 @@ def rome(iso):
     return dt.strftime('%d/%m %H:%M') if dt else iso
 
 
+def spread_from_fv(fv):
+    """Il campo fv delle righe di sinistra contiene 'spread_cu,spread_op_totale_cu,totale_op|...'."""
+    m = re.match(r'\s*(-?[\d.]+),(-?[\d.]+)_', fv or '')
+    return (m.group(1), m.group(2)) if m else None
+
+
 def build(js, sig, kind, today=None):
     """Dal file dati del sito (chiamate getData*(...)) alla lista di match."""
-    left, right = [], {}
+    left, rights = [], []
     for m in re.finditer(r'\b(getData\w*)\(', js):
         name = m.group(1)
         if name not in sig or js[max(m.start() - 9, 0):m.start()] == 'function ':
             continue
         d = dict(zip(sig[name], parse_args(js, m.end() - 1)))
         if name == 'getData2':
-            right[d.get('curl')] = d
+            rights.append(d)
         elif 'homeStr' in d:
             left.append((name, d))
+    # abbinamento riga sinistra/destra: per codice del match, poi per 'lc', infine per posizione
+    keyed = {k: {d[k]: d for d in rights if d.get(k)} for k in ('curl', 'lc')}
+    pair = []
+    for _, d in left:
+        pair.append(next((keyed[k][d[k]] for k in ('curl', 'lc') if d.get(k) in keyed[k]), None))
+    if sum(1 for p in pair if p) < len(left) / 2 and len(rights) == len(left):
+        pair = list(rights)
     live, out = kind == 'live', []
     today = today or datetime.now(ROME).date()
-    for name, d in left:
+    for (name, d), r in zip(left, pair):
         if not live:  # prossimi: solo quelli di oggi, fino a mezzanotte (ora italiana)
             dt = parse_iso(d.get('datetimeStr', ''))
             if dt and dt.date() != today:
                 continue
-        r = right.get(d.get('curl'))
         h, a = d.get('gghomehtStr', ''), d.get('ggawayhtStr', '')
+        sh = dict(cu=num(r['s1c']), op=num(r['s1o']), qcu=r['o1c'], qop=r['o1o']) if r and 's1c' in r and 'o1c' in r else None
+        sa = dict(cu=num(r['s2c']), op=num(r['s2o']), qcu=r['o2c'], qop=r['o2o']) if r and 's2c' in r and 'o2c' in r else None
+        fv = spread_from_fv(d.get('fv'))
+        if not sh and fv:  # almeno la linea dello spread, senza quote
+            sh = dict(cu=num(fv[0]), op=num(fv[1]), qcu='', qop='')
+            sa = dict(cu=num(-float(fv[0])), op=num(-float(fv[1])), qcu='', qop='')
         out.append(dict(
             kind=kind, league=d.get('leagueStr', ''), home=d.get('homeStr', ''), away=d.get('awayStr', ''),
             hy=to_int(d.get('yellowcardhomeStr')), hr=to_int(d.get('redcardhomeStr')),
@@ -132,8 +151,7 @@ def build(js, sig, kind, today=None):
             ht=f'{h}-{a}' if live and h.isdigit() and a.isdigit() else '',
             x_cu=[d.get('curr1Str', ''), d.get('currXStr', ''), d.get('curr2Str', '')],
             x_op=[d.get('open1Str', ''), d.get('openXStr', ''), d.get('open2Str', '')],
-            sh=dict(cu=num(r['s1c']), op=num(r['s1o']), qcu=r['o1c'], qop=r['o1o']) if r and 's1c' in r and 'o1c' in r else None,
-            sa=dict(cu=num(r['s2c']), op=num(r['s2o']), qcu=r['o2c'], qop=r['o2o']) if r and 's2c' in r and 'o2c' in r else None))
+            sh=sh, sa=sa))
     return out
 
 
@@ -164,7 +182,7 @@ def fetch_all(book=None, stats=None, day=0):
             matches += ms
         except Exception as e:
             errors[kind] = str(e)[:120]
-    return {'matches': matches, 'errors': errors, 'books': books}
+    return {'matches': matches, 'errors': errors, 'books': books, 'versione': VERSIONE}
 
 
 @app.route('/api/refresh')
@@ -192,3 +210,8 @@ def debug_ppg():
     except Exception as e:
         out['errore'] = str(e)[:150]
     return jsonify(out)
+
+
+@app.route('/api/versione')
+def versione():
+    return jsonify(versione=VERSIONE, prossimi='oggi (day0), fino a mezzanotte ora italiana')
