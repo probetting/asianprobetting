@@ -87,14 +87,22 @@ def to_int(x):
         return 0
 
 
-def rome(iso):
+ROME = ZoneInfo('Europe/Rome')
+
+
+def parse_iso(iso):
     try:
-        return datetime.fromisoformat(iso.replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m %H:%M')
+        return datetime.fromisoformat(iso.replace('Z', '+00:00')).astimezone(ROME)
     except Exception:
-        return iso
+        return None
 
 
-def build(js, sig, kind):
+def rome(iso):
+    dt = parse_iso(iso)
+    return dt.strftime('%d/%m %H:%M') if dt else iso
+
+
+def build(js, sig, kind, today=None):
     """Dal file dati del sito (chiamate getData*(...)) alla lista di match."""
     left, right = [], {}
     for m in re.finditer(r'\b(getData\w*)\(', js):
@@ -107,7 +115,12 @@ def build(js, sig, kind):
         elif 'homeStr' in d:
             left.append((name, d))
     live, out = kind == 'live', []
+    today = today or datetime.now(ROME).date()
     for name, d in left:
+        if not live:  # prossimi: solo quelli di oggi, fino a mezzanotte (ora italiana)
+            dt = parse_iso(d.get('datetimeStr', ''))
+            if dt and dt.date() != today:
+                continue
         r = right.get(d.get('curl'))
         h, a = d.get('gghomehtStr', ''), d.get('ggawayhtStr', '')
         out.append(dict(
@@ -124,7 +137,7 @@ def build(js, sig, kind):
     return out
 
 
-def fetch_all(book=None, stats=None, day=1):
+def fetch_all(book=None, stats=None, day=0):
     try:
         page = requests.get(SITE + '/livescore.html', headers=HDR, timeout=20).text
     except Exception as e:
@@ -156,7 +169,7 @@ def fetch_all(book=None, stats=None, day=1):
 
 @app.route('/api/refresh')
 def refresh():
-    resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day', 1))))
+    resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day', 0))))
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
