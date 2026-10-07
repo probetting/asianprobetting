@@ -43,7 +43,7 @@ function find(m,L){let b=null,t=.7999;const tr=(p,sw)=>{const s1=sim(m.home,sw?p
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let DATA=store.get('data')||SNAP,TAB=store.get('tab')||'live',ONLY=store.get('onlyp')===true;
 const cards=(y,r)=>(y?' 🟨'+y:'')+(r?' 🟥'+r:'');
-const sp=d=>d?[esc(d.op)+' @ '+esc(d.qop),esc(d.cu)+' @ '+esc(d.qcu)]:['–','–'];
+const sp=d=>d?[esc(d.op)+(d.qop?' @ '+esc(d.qop):''),esc(d.cu)+(d.qcu?' @ '+esc(d.qcu):'')]:['–','–'];
 function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),sc=m.hg!==''?' · '+esc(m.hg)+'-'+esc(m.ag):'',ht=m.ht&&m.ht!=='-'?' · 1T '+esc(m.ht):'';
  return `<article><div class=hd><b>${esc(m.home)}${cards(m.hy,m.hr)} – ${esc(m.away)}${cards(m.ay,m.ar)}</b><span>${esc(m.when)}${sc}${ht}</span></div>
 <table><tr><th></th><th>Apertura</th><th>Chiusura</th></tr>
@@ -59,7 +59,7 @@ function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[],P=DATA.matches.map(
  for(const [m,p] of rows){if(m.league!==last){last=m.league;h+=`<h3>${esc(last)}</h3>`}h+=card(m,p)}
  if(!rows.length)h+='<p class=sub>Nessun match da mostrare.</p>';
  $('out').innerHTML=h;
- $('st1').textContent=DATA.matches.length?'Quote: '+(DATA.updated||'esempio'):'Nessun dato: tocca "Aggiorna quote"';
+ $('st1').textContent=DATA.matches.length?'Quote: '+(DATA.updated||'esempio')+(()=>{const k=DATA.matches.filter(m=>m.kind===TAB),n=k.filter(m=>m.sh).length;return n<k.length?` · spread ${n}/${k.length}`:''})():'Nessun dato: tocca "Aggiorna quote"';
  $('st2').textContent=sv?`PPG del ${sv.date}${sv.date!==today()?' (non di oggi: aggiorna la lista)':''} · abbinati ${P.filter((p,i)=>p&&DATA.matches[i].kind===TAB).length} su ${DATA.matches.filter(m=>m.kind===TAB).length}`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
 function setList(txt){const d=JSON.parse(txt),ms=Array.isArray(d)?d:d.matches;if(!ms||!ms.length)throw 0;store.set('ppg',{date:today(),matches:ms});draw()}
 $('paste').onclick=async()=>{try{setList(await navigator.clipboard.readText())}catch(e){$('box').hidden=false}};
