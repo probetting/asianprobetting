@@ -124,7 +124,7 @@ def build(js, sig, kind):
     return out
 
 
-def fetch_all(book=None, stats=None, day=0):
+def fetch_all(book=None, stats=None, day=1):
     try:
         page = requests.get(SITE + '/livescore.html', headers=HDR, timeout=20).text
     except Exception as e:
@@ -156,7 +156,7 @@ def fetch_all(book=None, stats=None, day=0):
 
 @app.route('/api/refresh')
 def refresh():
-    resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day'))))
+    resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day', 1))))
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
