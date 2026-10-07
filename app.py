@@ -153,3 +153,38 @@ def debug4():
     except Exception as e:
         out['errore'] = str(e)[:150]
     return jsonify(out)
+
+
+@app.route('/api/debug5')
+def debug5():
+    """Mostra come lo script del sito costruisce l'indirizzo del file dati /tables/v4/..."""
+    from urllib.parse import urljoin
+    base = URLS['live']
+    names = r'function\s+bb\b|\bbb\s*=|\bgS\s*=|\bbook\s*=|\bsdm\s*=|\bcvp\s*=|\bcvpc\s*=|function\s+get_date_offset|function\s+get_sel_date|\bundermaintenance\s*='
+    out = {}
+    try:
+        page = requests.get(base, headers=HDR, timeout=20).text
+        js_files = [s for s in re.findall(r'<script[^>]+src=["\']([^"\']+)', page) if s.startswith('/') and 'cookie' not in s.lower()]
+        out['script_inline'] = [t.strip()[:1200] for t in re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', page, re.S) if t.strip()][:6]
+        out['input_nascosti'] = re.findall(r'<input[^>]*type=["\']hidden["\'][^>]*>', page)[:30]
+        for f in js_files:
+            js = requests.get(urljoin(base, f), headers=HDR, timeout=20).text
+            res = {}
+            i = js.find('var currUrl')
+            if i >= 0:
+                res['prima_di_currUrl'] = js[max(i - 1500, 0):i + 150]
+            hits, end = [], 0
+            for m in re.finditer(names, js):
+                if m.start() < end:
+                    continue
+                a, end = max(m.start() - 100, 0), m.end() + 220
+                hits.append(js[a:end])
+                if len(hits) >= 14:
+                    break
+            if hits:
+                res['definizioni'] = hits
+            if res:
+                out[f] = res
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
