@@ -188,3 +188,24 @@ def debug5():
     except Exception as e:
         out['errore'] = str(e)[:150]
     return jsonify(out)
+
+
+@app.route('/api/debug6')
+def debug6():
+    """Mostra i valori predefiniti di 'book' e 'stats' (cookie) e la variabile cvp della pagina nextgame."""
+    from urllib.parse import urljoin
+    out = {}
+    try:
+        nxt = requests.get(URLS['next'], headers=HDR, timeout=20).text
+        out['nextgame_script_inline'] = [t.strip()[:300] for t in re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', nxt, re.S) if 'cvp' in t]
+        out['nextgame_input'] = re.findall(r'<input[^>]*id=["\']value_(?:next|day|last)["\'][^>]*>', nxt)[:6]
+        page = requests.get(URLS['live'], headers=HDR, timeout=20).text
+        files = [s for s in re.findall(r'<script[^>]+src=["\']([^"\']+)', page) if s.startswith('/')]
+        pat = re.compile(r'function\s+(CookieBook|CookieStats|CookieStatsType|CookieLAN|getCookie)\b')
+        for f in files:
+            js = requests.get(urljoin(URLS['live'], f), headers=HDR, timeout=20).text
+            for m in pat.finditer(js):
+                out.setdefault('funzioni', {})[m.group(1) + ' @ ' + f] = js[m.start():m.start() + 520]
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
