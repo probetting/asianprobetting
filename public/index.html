@@ -10,6 +10,7 @@ h1{font-size:1.25rem;margin:16px 0 4px}h2{font-size:1rem;margin:20px 0 8px;color
 .sub{color:var(--mut);font-size:.85rem;margin:2px 0}
 button{background:var(--ac);color:var(--on);border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:600;margin:8px 0}
 input{width:100%;box-sizing:border-box;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:8px}
+.sec{background:var(--card);color:var(--fg);border:1px solid var(--bd)}.sec.on{background:var(--ac);color:var(--on);border-color:var(--ac)}
 .tabs{display:flex;gap:8px;margin:6px 0}.tabs button{flex:1;margin:0;background:var(--card);color:var(--fg);border:1px solid var(--bd)}.tabs button.on{background:var(--ac);color:var(--on);border-color:var(--ac)}
 textarea{width:100%;height:90px;box-sizing:border-box;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:8px}
 article{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin:0 0 10px}
@@ -19,7 +20,7 @@ th,td{text-align:left;padding:3px 4px;border-top:1px solid var(--bd)}th{color:va
 </style></head><body>
 <h1>Quote e PPG</h1>
 <p class=sub id=st1></p><p class=sub id=st2></p>
-<button id=ref>Aggiorna quote</button> <button id=paste>Incolla lista PPG</button>
+<button id=ref>Aggiorna quote</button> <button id=paste>Incolla lista PPG</button> <button id=onlyp class=sec>Solo con PPG: no</button>
 <details id=det><summary class=sub>Indirizzo del server</summary><input id=srv placeholder="https://.../api/refresh"><button id=sv>Salva</button></details>
 <div id=box hidden><textarea id=ta placeholder="Incolla qui la lista copiata da probettinghub"></textarea><button id=ok>Usa lista</button></div>
 <div class=tabs id=tabs><button data-k=live id=tl>Live</button><button data-k=next id=tn>Prossimi</button></div>
@@ -30,11 +31,12 @@ const $=id=>document.getElementById(id), today=()=>new Date().toLocaleDateString
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const STOP=new Set(['fc','cf','sc','ac','afc','fk','cd','ud','de','the','club']);
 const norm=n=>n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w&&!STOP.has(w)).join(' ');
-function sim(a,b){a=norm(a);b=norm(b);const m=a.length,n=b.length;if(!m||!n)return 0;let p=Array.from({length:n+1},(_,j)=>j);
+const NC=new Map(),nn=s=>{let v=NC.get(s);if(v===undefined){v=norm(s);NC.set(s,v)}return v};
+function sim(a,b){a=nn(a);b=nn(b);const m=a.length,n=b.length;if(!m||!n||Math.abs(m-n)>Math.max(m,n)*.2)return 0;let p=Array.from({length:n+1},(_,j)=>j);
  for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return 1-p[n]/Math.max(m,n)}
-function find(m,L){let b=null,t=0;for(const p of L){const s=Math.min(sim(m.home,p.home),sim(m.away,p.away));if(s>t){b=p;t=s}}return t>=.8?b:null}
+function find(m,L){let b=null,t=.7999;for(const p of L){const s1=sim(m.home,p.home);if(s1<t)continue;const s=Math.min(s1,sim(m.away,p.away));if(s>t){b=p;t=s}}return b}
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-let DATA=store.get('data')||SNAP,TAB=store.get('tab')||'live';
+let DATA=store.get('data')||SNAP,TAB=store.get('tab')||'live',ONLY=store.get('onlyp')===true;
 const cards=(y,r)=>(y?' 🟨'+y:'')+(r?' 🟥'+r:'');
 const sp=d=>d?[esc(d.op)+' @ '+esc(d.qop),esc(d.cu)+' @ '+esc(d.qcu)]:['–','–'];
 function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),sc=m.hg!==''?' · '+esc(m.hg)+'-'+esc(m.ag):'',ht=m.ht&&m.ht!=='-'?' · 1T '+esc(m.ht):'';
@@ -43,16 +45,21 @@ function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),sc=m.hg!==''?' · '+esc(m.hg)+'
 <tr><td>1 X 2</td><td>${esc((m.x_op||[]).join(' ')||'–')}</td><td>${esc((m.x_cu||[]).join(' ')||'–')}</td></tr>
 <tr><td>Spread casa</td><td>${ho[0]}</td><td>${ho[1]}</td></tr><tr><td>Spread ospite</td><td>${ao[0]}</td><td>${ao[1]}</td></tr>
 <tr><td>PPG</td><td colspan=2 class=ppg>${p?esc(p.ph)+' – '+esc(p.pa):'non trovato'}</td></tr></table></article>`}
-function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[];let hit=0,h='';const cnt=k=>DATA.matches.filter(m=>m.kind===k).length;
- $('tl').textContent='Live ('+cnt('live')+')';$('tn').textContent='Prossimi ('+cnt('next')+')';$('tl').className=TAB==='live'?'on':'';$('tn').className=TAB==='next'?'on':'';
- for(const [k,t] of [['live','Live'],['next','Prossimi match']].filter(x=>x[0]===TAB)){const ms=DATA.matches.filter(m=>m.kind===k);let last=null;h+=`<h2>${t} (${ms.length})</h2>`;
-  for(const m of ms){if(m.league!==last){last=m.league;h+=`<h3>${esc(last)}</h3>`}const p=find(m,L);hit+=!!p;h+=card(m,p)}}
+function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[],P=DATA.matches.map(m=>find(m,L));
+ const shown=k=>DATA.matches.map((m,i)=>[m,P[i]]).filter(([m,p])=>m.kind===k&&(!ONLY||p));
+ $('tl').textContent='Live ('+shown('live').length+')';$('tn').textContent='Domani ('+shown('next').length+')';
+ $('tl').className=TAB==='live'?'on':'';$('tn').className=TAB==='next'?'on':'';
+ $('onlyp').className='sec'+(ONLY?' on':'');$('onlyp').textContent=ONLY?'Solo con PPG: sì':'Solo con PPG: no';
+ const rows=shown(TAB);let h=`<h2>${TAB==='live'?'Live':'Match di domani'} (${rows.length})</h2>`,last=null;
+ for(const [m,p] of rows){if(m.league!==last){last=m.league;h+=`<h3>${esc(last)}</h3>`}h+=card(m,p)}
+ if(!rows.length)h+='<p class=sub>Nessun match da mostrare.</p>';
  $('out').innerHTML=h;
  $('st1').textContent=DATA.matches.length?'Quote: '+(DATA.updated||'esempio'):'Nessun dato: tocca "Aggiorna quote"';
- $('st2').textContent=sv?`PPG del ${sv.date}${sv.date!==today()?' (non di oggi: aggiorna la lista)':''} · abbinati ${hit} su ${cnt(TAB)}`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
+ $('st2').textContent=sv?`PPG del ${sv.date}${sv.date!==today()?' (non di oggi: aggiorna la lista)':''} · abbinati ${P.filter((p,i)=>p&&DATA.matches[i].kind===TAB).length} su ${DATA.matches.filter(m=>m.kind===TAB).length}`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
 function setList(txt){const d=JSON.parse(txt),ms=Array.isArray(d)?d:d.matches;if(!ms||!ms.length)throw 0;store.set('ppg',{date:today(),matches:ms});draw()}
 $('paste').onclick=async()=>{try{setList(await navigator.clipboard.readText())}catch(e){$('box').hidden=false}};
 $('ok').onclick=()=>{try{setList($('ta').value);$('box').hidden=true;$('ta').value=''}catch(e){alert('Lista non valida')}};
+$('onlyp').onclick=()=>{ONLY=!ONLY;store.set('onlyp',ONLY);draw()};
 $('tabs').onclick=e=>{const k=e.target.dataset.k;if(k){TAB=k;store.set('tab',k);draw()}};
 $('srv').value=store.get('srv')||'/api/refresh';
 $('sv').onclick=()=>{store.set('srv',$('srv').value.trim());$('st1').textContent='Indirizzo salvato'};
