@@ -209,3 +209,29 @@ def debug6():
     except Exception as e:
         out['errore'] = str(e)[:150]
     return jsonify(out)
+
+
+@app.route('/api/debug7')
+def debug7():
+    """Scarica i file dati (live e giorno 0) e ne mostra l'inizio, per capire il formato."""
+    import time
+    out = {}
+    try:
+        soup = BeautifulSoup(requests.get(URLS['live'], headers=HDR, timeout=20).text, 'lxml')
+        opts = lambda sid: [(o.get('value'), o.get_text(strip=True)) for o in (soup.find(id=sid).find_all('option') if soup.find(id=sid) else [])]
+        books, stats = opts('book_filter'), opts('stats_filter')
+        out['book_filter'], out['stats_filter'] = books[:12], stats[:12]
+        book, st = books[0][0], stats[0][0]
+        ms = int(time.time()) * 1000
+        urls = {'live': f'https://botbot3.space/tables/v4/{st}/livegame/{book}.js?date={ms}',
+                'next_day0': f'https://botbot3.space/tables/v4/{st}/tablenext/day0/{book}.js?date={ms}'}
+        h = {**HDR, 'Referer': 'https://www.asianbetsoccer.com/'}
+        for k, u in urls.items():
+            try:
+                r = requests.get(u, headers=h, timeout=20)
+                out[k] = dict(url=u, status=r.status_code, bytes=len(r.text), inizio=r.text[:1800], fine=r.text[-300:])
+            except Exception as e:
+                out[k] = dict(url=u, errore=str(e)[:150])
+    except Exception as e:
+        out['errore'] = str(e)[:150]
+    return jsonify(out)
