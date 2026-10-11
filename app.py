@@ -17,8 +17,12 @@ VERSIONE = 'v5'
 
 SITE = 'https://www.asianbetsoccer.com'
 DATA = 'https://botbot3.space/tables/v4'
-HDR = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-       'Accept-Language': 'en-US,en;q=0.9'}
+HDR = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+       'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8', 'Upgrade-Insecure-Requests': '1',
+       'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1'}
+HDR_JS = {'User-Agent': HDR['User-Agent'], 'Accept': '*/*', 'Accept-Language': HDR['Accept-Language'], 'Referer': 'https://www.asianbetsoccer.com/',
+          'Sec-Fetch-Dest': 'script', 'Sec-Fetch-Mode': 'no-cors', 'Sec-Fetch-Site': 'cross-site'}
 
 _LEFT = ('lcl,pn,lc,fv,acx,curl,leagueStr,redcardhomeStr,yellowcardhomeStr,homeStr,datetimeStr,gghomeftStr,gghomehtStr,'
          'ggawayhtStr,curr1Str,currXStr,curr2Str,open1Str,openXStr,open2Str,redcardawayStr,yellowcardawayStr,awayStr,'
@@ -192,7 +196,7 @@ def fetch_all(book=None, stats=None, day=0, secs=('live', 'next'), past=None):
         if kind not in sections:
             continue
         try:
-            r = requests.get(f'{DATA}/{s}/{sections[kind]}/{b}.js?date={ts}', headers={**HDR, 'Referer': SITE + '/'}, timeout=25)
+            r = requests.get(f'{DATA}/{s}/{sections[kind]}/{b}.js?date={ts}', headers=HDR_JS, timeout=25)
             if r.status_code != 200:
                 errors[kind] = f'HTTP {r.status_code}'
                 continue
@@ -259,3 +263,33 @@ def ppg():
         resp.status_code = 503
     resp.headers['Cache-Control'] = 'no-store'
     return resp
+
+
+@app.route('/api/debug-asian')
+def debug_asian():
+    """Diagnostica: da dove esce il server e come risponde asianbetsoccer (pagina e file dati)."""
+    out = {'regione': os.environ.get('VERCEL_REGION')}
+    try:
+        out['ip'] = requests.get('https://api.ipify.org', timeout=8).text
+    except Exception as e:
+        out['ip'] = str(e)[:60]
+    agenti = {'chrome': HDR['User-Agent'],
+              'iphone': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+              'semplice': 'python-requests'}
+    out['pagina'] = {}
+    for nome, ua in agenti.items():
+        for url in (SITE + '/livescore.html', 'https://asianbetsoccer.com/livescore.html'):
+            try:
+                r = requests.get(url, headers={**HDR, 'User-Agent': ua}, timeout=15)
+                out['pagina'][f'{nome} {url.split("//")[1][:3]}'] = f'{r.status_code} {len(r.text)}B server={r.headers.get("server")}'
+            except Exception as e:
+                out['pagina'][f'{nome} {url.split("//")[1][:3]}'] = str(e)[:60]
+    out['dati'] = {}
+    for nome, u in {'radice': 'https://botbot3.space/',
+                    'live': f'{DATA}/{DEFAULT_STATS[0][0]}/livegame/{DEFAULT_BOOKS[0][0]}.js?date={int(time.time()) * 1000}'}.items():
+        try:
+            r = requests.get(u, headers=HDR_JS, timeout=15)
+            out['dati'][nome] = f'{r.status_code} {len(r.text)}B server={r.headers.get("server")} :: {r.text[:120]!r}'
+        except Exception as e:
+            out['dati'][nome] = str(e)[:80]
+    return jsonify(out)
