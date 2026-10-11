@@ -1,0 +1,135 @@
+<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Asian Probetting</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--accent:#B6F24A;--bg:#0E1116;--card:#171C24;--line:#2A323D;--muted:#9AA4B2;--text:#E8ECF1;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif}
+.app{max-width:480px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px}
+.top{display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:22px;letter-spacing:-.01em}
+.updated{font-size:12px;color:var(--muted)}
+.switch{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#C5CCD6;cursor:pointer}
+.switch input{display:none}
+.track{width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:background .2s}
+.track::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:10px;background:var(--bg);transition:transform .2s}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track::after{transform:translateX(18px)}
+button{font-family:inherit}
+.refresh{height:48px;border:0;border-radius:12px;background:var(--accent);color:var(--bg);font:700 16px 'Nunito',sans-serif;cursor:pointer}
+.refresh:disabled{opacity:.6}
+.tabs{display:flex;gap:8px}
+.tab{flex:1;height:44px;border-radius:10px;border:1px solid var(--line);background:transparent;color:#C5CCD6;font:600 14px 'Nunito',sans-serif;cursor:pointer;padding:0 2px}
+.tab.active{background:#1C222B;border-color:#1C222B;color:var(--accent);font-weight:700}
+.sub{font-size:12px;color:var(--muted);margin:0}
+.lnk{align-self:flex-start;background:transparent;border:1px solid var(--line);color:#C5CCD6;border-radius:10px;padding:6px 12px;font:700 12px 'Nunito',sans-serif;cursor:pointer}
+input[type=date],input[type=text],textarea{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px;font:600 14px 'Nunito',sans-serif;width:100%}
+textarea{height:90px}
+.card{background:var(--card);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+.meta span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{color:var(--accent);font-weight:700;white-space:nowrap}
+.team{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.team b{font-size:17px}
+.ppg{font:700 12px 'Nunito',sans-serif;font-variant-numeric:tabular-nums;color:var(--accent);white-space:nowrap}
+.ppg.na{color:var(--muted)}
+.score{font-size:12px;color:var(--muted)}
+.odds{display:grid;grid-template-columns:70px 1fr 1fr;gap:6px 8px;font:700 12px 'Nunito',sans-serif;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:10px}
+.odds .l,.odds .h{color:var(--muted)}
+details{margin-top:8px}
+.lgx{background:none;border:0;color:var(--muted);font-size:12px;padding:0 0 0 8px;cursor:pointer}
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:13px}
+</style></head><body>
+<div class=app>
+<div class=top><div><h1>Asian Probetting</h1><div class=updated id=upd></div></div>
+<label class=switch>Solo PPG<input type=checkbox id=onlyp><span class=track></span></label></div>
+<button class=refresh id=ref>Aggiorna quote</button>
+<div class=tabs id=tabs><button class=tab data-k=live id=tl></button><button class=tab data-k=next id=tn></button><button class=tab data-k=past id=tp></button></div>
+<div id=pdw hidden><p class=sub>Giorno delle partite passate</p><input type=date id=pd></div>
+<p class=sub id=st1></p><p class=sub id=st2></p>
+<button class=lnk id=paste>Incolla lista PPG</button>
+<div id=box hidden><textarea id=ta placeholder="Incolla qui la lista copiata da probettinghub"></textarea><button class=refresh id=ok style="width:100%;margin-top:8px">Usa lista</button></div>
+<div id=out></div>
+<details><summary class=sub id=hds>Campionati nascosti (0)</summary><div id=hl></div></details>
+<details><summary class=sub>Impostazioni</summary><p class=sub style="margin-top:8px">Indirizzo del server</p><input type=text id=srv placeholder="/api/refresh"><p class=sub style="margin-top:8px">Chiave segreta</p><input type=password id=key autocomplete=off><button class=lnk id=sv style="margin-top:8px">Salva</button></details>
+</div>
+<script>
+const SNAP={"updated":"","matches":[]};
+const $=id=>document.getElementById(id), today=()=>new Date().toLocaleDateString('sv');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const STOP=new Set(['fc','cf','sc','ac','afc','fk','cd','ud','de','the','club','nk','sk','ik','il','if','bk','gk','kf','ks','sv','as','ss','us','sd','ca','cs','rc','fotball','fotboll','football','futbol','calcio']);
+const norm=n=>{let s=n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\(w\)|\bwomen\b|\bfemminile\b/g,' w ')
+ .replace(/([a-z])(u\d\d)\b/g,'$1 $2').replace(/\bu[ -]?(\d\d)\b/g,' u$1 ').replace(/[^a-z0-9 ]/g,' ');
+ const t=s.split(/\s+/).filter(Boolean).map(w=>({b:'ii','2':'ii',res:'ii',reserves:'ii'}[w]||w)),k=t.filter(w=>!STOP.has(w));return (k.length?k:t).join(' ')};
+const NC=new Map(),nn=s=>{let v=NC.get(s);if(v===undefined){v=norm(s);NC.set(s,v)}return v};
+function sim(a,b){a=nn(a);b=nn(b);if(a===b)return 1;const A=a.split(' '),B=b.split(' '),[s,l]=A.length<=B.length?[A,B]:[B,A];
+ if(s.length&&s.length<l.length&&s.every(w=>l.includes(w))&&s.some(w=>w.length>=4)&&l.filter(w=>!s.includes(w)).every(w=>!/^(u\d\d|ii|w)$/.test(w)))return .9;
+ const m=a.length,n=b.length;if(!m||!n||Math.abs(m-n)>Math.max(m,n)*.2)return 0;let p=Array.from({length:n+1},(_,j)=>j);
+ for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return 1-p[n]/Math.max(m,n)}
+function find(m,L){let b=null,t=.7999;const tr=(p,sw)=>{const s1=sim(m.home,sw?p.away:p.home);if(s1<t)return;const s=Math.min(s1,sim(m.away,sw?p.home:p.away));if(s>t){b=sw?{...p,ph:p.pa,pa:p.ph}:p;t=s}};
+ for(const p of L){tr(p,0);tr(p,1)}return b}
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let DATA=store.get('data')||SNAP,TAB=store.get('tab')||'live',ONLY=store.get('onlyp')===true,HID=new Set(store.get('hid')||[]);
+const cards=(y,r)=>(y?' 🟨'+y:'')+(r?' 🟥'+r:'');
+const sp=d=>d?[esc(d.op)+(d.qop?' @ '+esc(d.qop):''),esc(d.cu)+(d.qcu?' @ '+esc(d.qcu):'')]:['–','–'];
+function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),k=m.kind,fin=k==='past'||(k==='live'&&m.when==='FT');
+ const badge=fin?'FINITA':k==='live'?'LIVE '+esc(m.when):esc(m.when);
+ const hasS=k!=='next'&&m.hg!==''&&m.hg!=null;
+ const score=hasS?`<div class=score>Parziale ${m.ht&&m.ht!=='-'?esc(m.ht):'–'} · ${fin?'Finale':'Attuale'} ${esc(m.hg)}-${esc(m.ag)}</div>`:'';
+ const pp=v=>p&&v!=null?`<span class=ppg>PPG ${esc(v)}</span>`:'<span class="ppg na">PPG –</span>';
+ return `<div class=card><div class=meta><span>${esc(m.league)}${k==='past'?' · '+esc(m.when):''}<button class=lgx data-hide="${esc(m.league)}" title="Nascondi questo campionato">✕</button></span><span class=badge>${badge}</span></div>
+<div class=team><b>${esc(m.home)}${cards(m.hy,m.hr)}</b>${pp(p&&p.ph)}</div>
+<div class=team><b>${esc(m.away)}${cards(m.ay,m.ar)}</b>${pp(p&&p.pa)}</div>${score}
+<div class=odds><span></span><span class=h>Apertura</span><span class=h>Chiusura</span>
+<span class=l>Spread 1</span><span>${ho[0]}</span><span>${ho[1]}</span>
+<span class=l>Spread 2</span><span>${ao[0]}</span><span>${ao[1]}</span>
+<span class=l>1 X 2</span><span>${esc((m.x_op||[]).join(' · ')||'–')}</span><span>${esc((m.x_cu||[]).join(' · ')||'–')}</span></div></div>`}
+function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[],P=DATA.matches.map(m=>find(m,L));
+ const shown=k=>DATA.matches.map((m,i)=>[m,P[i]]).filter(([m,p])=>m.kind===k&&!HID.has(m.league)&&(!ONLY||p));
+ for(const [k,id,t] of [['live','tl','Live'],['next','tn','Next oggi'],['past','tp','Past']]){$(id).textContent=t+' ('+shown(k).length+')';$(id).className='tab'+(TAB===k?' active':'')}
+ $('onlyp').checked=ONLY;$('hds').textContent='Campionati nascosti ('+HID.size+')';
+ $('hl').innerHTML=HID.size?[...HID].sort().map(n=>`<div class=hrow><span>${esc(n)}</span><button class=lnk data-show="${esc(n)}">Mostra</button></div>`).join('')+'<button class=lnk data-showall=1 style="margin-top:10px">Mostra tutti</button>':'<p class=sub>Nessuno. Tocca la ✕ accanto al campionato di una card per nasconderlo.</p>';$('pdw').hidden=TAB!=='past';
+ const rows=shown(TAB);let h='';for(const [m,p] of rows)h+=card(m,p);
+ $('out').innerHTML=rows.length?h:'<p class=sub>Nessun match da mostrare.</p>';
+ const u=DATA.updated;$('upd').textContent=!DATA.matches.length?'nessun dato':u?(/^\d/.test(u)?'agg. '+u:u):'dati di esempio';
+ const k=DATA.matches.filter(m=>m.kind===TAB),n=k.filter(m=>m.sh).length;
+ $('st1').textContent=KEYERR?'Chiave errata o mancante: inseriscila nelle impostazioni in fondo alla pagina':!DATA.matches.length?'Tocca "Aggiorna quote" per caricare i match':n<k.length?`Spread trovati: ${n}/${k.length}`:'';
+ $('st2').textContent=sv?`PPG del ${sv.date}${sv.date!==today()?' (non di oggi: aggiorna la lista)':''} · abbinati ${P.filter((p,i)=>p&&DATA.matches[i].kind===TAB).length} su ${k.length}`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
+const apiPpg=()=>(store.get('srv')||'/api/refresh').replace(/\/api\/refresh.*$/,'/api/ppg');
+const hdr=()=>({'Content-Type':'application/json','X-Key':store.get('key')||''});
+let KEYERR=false;
+async function pushPpg(){const sv=store.get('ppg');if(!sv)return;try{const r=await fetch(apiPpg(),{method:'POST',headers:hdr(),body:JSON.stringify(sv)});KEYERR=r.status===401}catch(e){}}
+async function syncPpg(){try{const r=await fetch(apiPpg(),{cache:'no-store',headers:hdr()});if(r.status===401){KEYERR=true;return}KEYERR=false;if(!r.ok)return;
+ const d=await r.json(),sv=store.get('ppg');
+ if(d&&d.matches&&d.matches.length&&(!sv||(d.ts||0)>(sv.ts||0)))store.set('ppg',d);
+ else if(sv&&(!d||!d.matches||(sv.ts||0)>(d.ts||0)))await pushPpg()}catch(e){}}
+function setList(txt){const d=JSON.parse(txt),ms=Array.isArray(d)?d:d.matches;if(!ms||!ms.length)throw 0;store.set('ppg',{date:today(),ts:Date.now(),matches:ms});draw();pushPpg()}
+async function refresh(){const base=store.get('srv')||'/api/refresh',past=TAB==='past',secs=past?'past':'live,next';
+ const url=base+(base.includes('?')?'&':'?')+'sec='+secs+(past?'&past='+$('pd').value:'');
+ $('ref').disabled=true;$('ref').textContent='Aggiorno…';let msg='';
+ try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw 0;const d=await r.json(),er=d.errors||{};
+  if(!d.matches.length&&Object.keys(er).length)msg='Il server non ha trovato dati: '+JSON.stringify(er);
+  else{const ks=secs.split(',');DATA={matches:DATA.matches.filter(m=>!ks.includes(m.kind)).concat(d.matches),updated:new Date().toLocaleTimeString('it',{hour:'2-digit',minute:'2-digit'})};store.set('data',DATA);
+   if(Object.keys(er).length)msg='Parziale: '+JSON.stringify(er)}}
+ catch(e){msg='Aggiornamento non riuscito: riprova'}
+ await syncPpg();$('ref').disabled=false;$('ref').textContent='Aggiorna quote';draw();if(msg)$('st1').textContent=msg}
+$('paste').onclick=async()=>{try{setList(await navigator.clipboard.readText())}catch(e){$('box').hidden=false}};
+$('ok').onclick=()=>{try{setList($('ta').value);$('box').hidden=true;$('ta').value=''}catch(e){alert('Lista non valida')}};
+$('out').onclick=e=>{const b=e.target.closest&&e.target.closest('[data-hide]');if(!b)return;HID.add(b.dataset.hide);store.set('hid',[...HID]);draw()};
+$('hl').onclick=e=>{const b=e.target.closest&&e.target.closest('button');if(!b)return;if(b.dataset.showall)HID.clear();else HID.delete(b.dataset.show);store.set('hid',[...HID]);draw()};
+$('onlyp').onchange=()=>{ONLY=$('onlyp').checked;store.set('onlyp',ONLY);draw()};
+$('tabs').onclick=e=>{const k=e.target.dataset.k;if(!k)return;TAB=k;store.set('tab',k);draw();if(k==='past'&&!DATA.matches.some(m=>m.kind==='past'))refresh()};
+$('srv').value=store.get('srv')||'';$('key').value=store.get('key')||'';
+$('sv').onclick=async()=>{store.set('srv',$('srv').value.trim());store.set('key',$('key').value.trim());await syncPpg();draw();if(!KEYERR)$('st1').textContent='Impostazioni salvate'};
+$('ref').onclick=refresh;
+{const y=new Date(Date.now()-864e5).toLocaleDateString('sv');$('pd').value=y;$('pd').max=y;$('pd').min='2025-01-01';$('pd').onchange=refresh}
+async function fromHash(){const m=location.hash.match(/^#ppg=([gj])(.+)$/);if(!m)return;
+ try{let b=m[2].replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';
+  const bytes=Uint8Array.from(atob(b),c=>c.charCodeAt(0));
+  const txt=m[1]==='g'?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text():new TextDecoder().decode(bytes);
+  const ms=JSON.parse(txt).m.map(r=>({home:r[0],away:r[1],ph:r[2],pa:r[3]}));
+  if(ms.length){store.set('ppg',{date:today(),ts:Date.now(),matches:ms});await pushPpg()}}catch(e){}
+ try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+draw();fromHash().then(async()=>{await syncPpg();draw()},draw);
+</script></body></html>

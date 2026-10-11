@@ -1,8 +1,11 @@
+import hmac
 import html
+import json
+import os
 import re
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
@@ -128,10 +131,10 @@ def build(js, sig, kind, today=None):
         pair.append(next((keyed[k][d[k]] for k in ('curl', 'lc') if d.get(k) in keyed[k]), None))
     if sum(1 for p in pair if p) < len(left) / 2 and len(rights) == len(left):
         pair = list(rights)
-    live, out = kind == 'live', []
+    scores, out = kind in ('live', 'past'), []
     today = today or datetime.now(ROME).date()
     for (name, d), r in zip(left, pair):
-        if not live:  # prossimi: solo quelli di oggi, fino a mezzanotte (ora italiana)
+        if kind == 'next':  # prossimi: solo quelli di oggi, fino a mezzanotte (ora italiana)
             dt = parse_iso(d.get('datetimeStr', ''))
             if dt and dt.date() != today:
                 continue
@@ -146,72 +149,113 @@ def build(js, sig, kind, today=None):
             kind=kind, league=d.get('leagueStr', ''), home=d.get('homeStr', ''), away=d.get('awayStr', ''),
             hy=to_int(d.get('yellowcardhomeStr')), hr=to_int(d.get('redcardhomeStr')),
             ay=to_int(d.get('yellowcardawayStr')), ar=to_int(d.get('redcardawayStr')),
-            when=(d.get('statusStr') or ('FT' if name == 'getDatalast1' else '')) if live else rome(d.get('datetimeStr', '')),
-            hg=d.get('gghomeftStr', '') if live else '', ag=d.get('ggawayftStr', '') if live else '',
-            ht=f'{h}-{a}' if live and h.isdigit() and a.isdigit() else '',
+            when=(d.get('statusStr') or ('FT' if name == 'getDatalast1' else '')) if kind == 'live' else rome(d.get('datetimeStr', '')),
+            hg=d.get('gghomeftStr', '') if scores else '', ag=d.get('ggawayftStr', '') if scores else '',
+            ht=f'{h}-{a}' if scores and h.isdigit() and a.isdigit() else '',
             x_cu=[d.get('curr1Str', ''), d.get('currXStr', ''), d.get('curr2Str', '')],
             x_op=[d.get('open1Str', ''), d.get('openXStr', ''), d.get('open2Str', '')],
             sh=sh, sa=sa))
     return out
 
 
-def fetch_all(book=None, stats=None, day=0):
+# Valori dei menu del sito (book e stats): usati solo se la pagina non si riesce a leggere
+DEFAULT_BOOKS = [('4024db60a6b01ec72606b6de08a03d0a0f13c36c', '188Bet'), ('1743605751427885960fcda9d406c6562acf0947', 'Bet365'),
+                 ('5114ca7854ec3b441d7b6eddd7365b7d6d98ec2c', 'Sbobet'), ('7b98090ef6e2d191e074fbdcebf44902ef27f939', 'Crown'),
+                 ('26cc084a82bdf480f5c4ab66def0f1393f77c065', '12Bet'), ('8f6ec7b435c6e9cfbbf8541fe47601347b8408d0', '18Bet'),
+                 ('f5425a19c52dafbf5944d66299181184989ebc8c', 'AvgOdds'), ('5d529f7175cc554d3a15435830dfbbf4ac829ff2', 'Bet365 Live')]
+DEFAULT_STATS = [('Q', 'Basic'), ('A', 'Advance'), ('L', 'League')]
+
+
+def fetch_all(book=None, stats=None, day=0, secs=('live', 'next'), past=None):
+    problema = ''
     try:
-        page = requests.get(SITE + '/livescore.html', headers=HDR, timeout=20).text
+        pr = requests.get(SITE + '/livescore.html', headers=HDR, timeout=20)
+        page = pr.text
     except Exception as e:
-        return {'matches': [], 'errors': {'pagina': str(e)[:120]}}
+        page, problema = '', str(e)[:80]
     soup = BeautifulSoup(page, 'lxml')
     opts = lambda sid: [(o.get('value'), o.get_text(strip=True)) for o in (soup.find(id=sid).find_all('option') if soup.find(id=sid) else [])]
     books, sts = opts('book_filter'), opts('stats_filter')
     if not books or not sts:
-        return {'matches': [], 'errors': {'pagina': 'menu book/stats non trovati'}}
+        if not problema:
+            t = soup.find('title')
+            problema = f'menu non trovati (HTTP {pr.status_code}, titolo "{(t.get_text(strip=True) if t else "")[:50]}")'
+        books, sts = books or DEFAULT_BOOKS, sts or DEFAULT_STATS
     pick = lambda lst, want: next((v for v, t in lst if want and want.lower() in (v.lower(), t.lower())), lst[0][0])
     b, s = pick(books, book), pick(sts, stats)
+    if not (past and re.fullmatch(r'\d{4}-\d{2}-\d{2}', past)):
+        past = (datetime.now(ROME) - timedelta(days=1)).date().isoformat()
+    sections = {'live': 'livegame', 'next': f'tablenext/day{day}', 'past': f'tablelast/{past}'}
     sig, ts = signatures(page), int(time.time()) * 1000
     matches, errors = [], {}
-    for kind, section in (('live', 'livegame'), ('next', f'tablenext/day{day}')):
+    for kind in secs:
+        if kind not in sections:
+            continue
         try:
-            r = requests.get(f'{DATA}/{s}/{section}/{b}.js?date={ts}', headers={**HDR, 'Referer': SITE + '/'}, timeout=25)
+            r = requests.get(f'{DATA}/{s}/{sections[kind]}/{b}.js?date={ts}', headers={**HDR, 'Referer': SITE + '/'}, timeout=25)
             if r.status_code != 200:
                 errors[kind] = f'HTTP {r.status_code}'
                 continue
             ms = build(r.text, sig, kind)
-            if not ms:
+            if not ms and kind != 'past':
                 names = dict(Counter(re.findall(r'\b(getData\w*)\(', r.text)))
                 errors[kind] = f'nessun match letto ({len(r.text)} byte, chiamate {names})'
             matches += ms
         except Exception as e:
             errors[kind] = str(e)[:120]
-    return {'matches': matches, 'errors': errors, 'books': books, 'versione': VERSIONE}
+    if problema and not matches:
+        errors['pagina'] = problema
+    return {'matches': matches, 'errors': errors, 'books': books}
 
 
 @app.route('/api/refresh')
 def refresh():
-    resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day', 0))))
+    secs = tuple(x for x in request.args.get('sec', 'live,next').split(',') if x)
+    resp = jsonify(fetch_all(request.args.get('book'), request.args.get('stats'), to_int(request.args.get('day', 0)),
+                             secs, request.args.get('past')))
     resp.headers['Cache-Control'] = 'no-store'
     return resp
-
-
-@app.route('/api/debug-ppg')
-def debug_ppg():
-    """Prova a leggere probettinghub dal server e mostra da dove prende i dati."""
-    url = 'https://probettinghub.com/it/pro-finder'
-    out = {}
-    try:
-        r = requests.get(url, headers=HDR, timeout=25)
-        t = r.text
-        out.update(status=r.status_code, bytes=len(t), titolo=(re.search(r'<title[^>]*>(.*?)</title>', t, re.S) or [None, ''])[1].strip()[:120],
-                   server=r.headers.get('server'), cloudflare='cf-ray' in r.headers)
-        out['indizi'] = {k: t.count(k) for k in ['__NEXT_DATA__', 'self.__next_f', 'application/json', '<table', 'ppg', 'PPG']}
-        out['script_src'] = re.findall(r'<script[^>]+src=["\']([^"\']+)', t)[:12]
-        out['url_api'] = sorted(set(re.findall(r'["\'](https?://[^"\'\s<>]*(?:api|supabase|graphql|firebase|rest)[^"\'\s<>]*|/api/[^"\'\s<>]*)', t)))[:15]
-        m = re.search(r'ppg', t, re.I)
-        out['intorno_ppg'] = t[max(m.start() - 200, 0):m.start() + 300] if m else None
-    except Exception as e:
-        out['errore'] = str(e)[:150]
-    return jsonify(out)
-
-
 @app.route('/api/versione')
 def versione():
     return jsonify(versione=VERSIONE, prossimi='oggi (day0), fino a mezzanotte ora italiana')
+
+
+def redis(*cmd):
+    """Comando Redis via REST (Upstash collegato da Vercel: variabili KV_REST_API_URL e KV_REST_API_TOKEN)."""
+    url = os.environ.get('KV_REST_API_URL') or os.environ.get('UPSTASH_REDIS_REST_URL')
+    tok = os.environ.get('KV_REST_API_TOKEN') or os.environ.get('UPSTASH_REDIS_REST_TOKEN')
+    if not url or not tok:
+        raise RuntimeError('archivio non collegato')
+    r = requests.post(url, headers={'Authorization': f'Bearer {tok}'}, json=list(cmd), timeout=10)
+    r.raise_for_status()
+    return r.json().get('result')
+
+
+def key_ok():
+    """Se su Vercel è impostata la variabile PPG_KEY, serve l'intestazione X-Key uguale."""
+    k = os.environ.get('PPG_KEY')
+    return (not k) or hmac.compare_digest(request.headers.get('X-Key', '').encode(), k.encode())
+
+
+@app.route('/api/ppg', methods=['GET', 'POST'])
+def ppg():
+    """Lista PPG del giorno condivisa tra i dispositivi."""
+    if not key_ok():
+        return jsonify(errore='chiave errata'), 401
+    try:
+        if request.method == 'POST':
+            d = request.get_json(force=True, silent=True) or {}
+            ms = d.get('matches')
+            if not isinstance(ms, list) or not ms or len(ms) > 5000:
+                return jsonify(errore='lista non valida'), 400
+            clean = [{k: str(m.get(k, ''))[:80] for k in ('home', 'away', 'ph', 'pa')} for m in ms if isinstance(m, dict)]
+            body = {'date': str(d.get('date', ''))[:10], 'ts': int(d.get('ts') or 0), 'matches': clean}
+            redis('SET', 'ppg', json.dumps(body, ensure_ascii=False), 'EX', 3 * 86400)
+            return jsonify(ok=True, n=len(clean))
+        raw = redis('GET', 'ppg')
+        resp = jsonify(json.loads(raw) if raw else {})
+    except Exception as e:
+        resp = jsonify(errore=str(e)[:100])
+        resp.status_code = 503
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
