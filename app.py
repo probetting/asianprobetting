@@ -16,7 +16,7 @@ app = Flask(__name__)
 VERSIONE = 'v5'
 
 SITE = 'https://www.asianbetsoccer.com'
-DATA = 'https://botbot3.space/tables/v4'
+DATA_HOST = 'https://botbot3.space'
 HDR = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
        'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8', 'Upgrade-Insecure-Requests': '1',
@@ -68,17 +68,20 @@ def parse_args(js, i):
 
 
 def signatures(page):
-    """Nomi dei parametri delle funzioni getData* letti da tablefunc; altrimenti quelli noti."""
-    sig = dict(SIG)
+    """Parametri delle funzioni getData* e indirizzo del sito dei dati, letti da tablefunc; altrimenti i valori noti."""
+    sig, host = dict(SIG), DATA_HOST
     m = re.search(r'src=["\'](/settings/tablefunc[^"\']+)', page)
     if m:
         try:
             tf = requests.get(SITE + m.group(1), headers=HDR, timeout=20).text
             for f in re.finditer(r'function\s+(getData\w*)\s*\(([^)]*)\)', tf):
                 sig[f.group(1)] = [p.strip() for p in f.group(2).split(',')]
+            h = re.search(r'function\s+bb\s*\(\)\s*\{\s*return\s*["\'](https?://[^"\']+)["\']', tf)
+            if h:
+                host = h.group(1).rstrip('/')
         except Exception:
             pass
-    return sig
+    return sig, host
 
 
 def num(x):
@@ -190,15 +193,16 @@ def fetch_all(book=None, stats=None, day=0, secs=('live', 'next'), past=None):
     if not (past and re.fullmatch(r'\d{4}-\d{2}-\d{2}', past)):
         past = (datetime.now(ROME) - timedelta(days=1)).date().isoformat()
     sections = {'live': 'livegame', 'next': f'tablenext/day{day}', 'past': f'tablelast/{past}'}
-    sig, ts = signatures(page), int(time.time()) * 1000
+    sig, host = signatures(page)
+    ts, da_menu = int(time.time()) * 1000, 'riserva' if (not opts('book_filter') or not opts('stats_filter')) else 'menu'
     matches, errors = [], {}
     for kind in secs:
         if kind not in sections:
             continue
         try:
-            r = requests.get(f'{DATA}/{s}/{sections[kind]}/{b}.js?date={ts}', headers=HDR_JS, timeout=25)
+            r = requests.get(f'{host}/tables/v4/{s}/{sections[kind]}/{b}.js?date={ts}', headers=HDR_JS, timeout=25)
             if r.status_code != 200:
-                errors[kind] = f'HTTP {r.status_code}'
+                errors[kind] = f"HTTP {r.status_code} ({host.split('//')[-1]}, book da {da_menu})"
                 continue
             ms = build(r.text, sig, kind)
             if not ms and kind != 'past':
@@ -286,7 +290,7 @@ def debug_asian():
                 out['pagina'][f'{nome} {url.split("//")[1][:3]}'] = str(e)[:60]
     out['dati'] = {}
     for nome, u in {'radice': 'https://botbot3.space/',
-                    'live': f'{DATA}/{DEFAULT_STATS[0][0]}/livegame/{DEFAULT_BOOKS[0][0]}.js?date={int(time.time()) * 1000}'}.items():
+                    'live': f'{DATA_HOST}/tables/v4/{DEFAULT_STATS[0][0]}/livegame/{DEFAULT_BOOKS[0][0]}.js?date={int(time.time()) * 1000}'}.items():
         try:
             r = requests.get(u, headers=HDR_JS, timeout=15)
             out['dati'][nome] = f'{r.status_code} {len(r.text)}B server={r.headers.get("server")} :: {r.text[:120]!r}'
