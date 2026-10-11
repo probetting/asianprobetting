@@ -38,6 +38,7 @@ textarea{height:90px}
 .odds{display:grid;grid-template-columns:70px 1fr 1fr;gap:6px 8px;font:700 12px 'Nunito',sans-serif;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:10px}
 .odds .l,.odds .h{color:var(--muted)}
 details{margin-top:8px}
+#out{display:flex;flex-direction:column;gap:16px}
 .lgx{background:none;border:0;color:var(--muted);font-size:12px;padding:0 0 0 8px;cursor:pointer}
 .hrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:13px}
 </style></head><body>
@@ -85,7 +86,7 @@ function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),k=m.kind,fin=k==='past'||(k==='
 <span class=l>Spread 1</span><span>${ho[0]}</span><span>${ho[1]}</span>
 <span class=l>Spread 2</span><span>${ao[0]}</span><span>${ao[1]}</span>
 <span class=l>1 X 2</span><span>${esc((m.x_op||[]).join(' · ')||'–')}</span><span>${esc((m.x_cu||[]).join(' · ')||'–')}</span></div></div>`}
-function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[],P=DATA.matches.map(m=>find(m,L));
+function draw(){const sv=store.get('ppg'),L=sv?sv.matches.map((p,i)=>({...p,_i:i})):[],P=DATA.matches.map(m=>find(m,L));
  const shown=k=>DATA.matches.map((m,i)=>[m,P[i]]).filter(([m,p])=>m.kind===k&&!HID.has(m.league)&&(!ONLY||p));
  for(const [k,id,t] of [['live','tl','Live'],['next','tn','Next oggi'],['past','tp','Past']]){$(id).textContent=t+' ('+shown(k).length+')';$(id).className='tab'+(TAB===k?' active':'')}
  $('onlyp').checked=ONLY;$('hds').textContent='Campionati nascosti ('+HID.size+')';
@@ -95,7 +96,8 @@ function draw(){const sv=store.get('ppg'),L=sv?sv.matches:[],P=DATA.matches.map(
  const u=DATA.updated;$('upd').textContent=!DATA.matches.length?'nessun dato':u?(/^\d/.test(u)?'agg. '+u:u):'dati di esempio';
  const k=DATA.matches.filter(m=>m.kind===TAB),n=k.filter(m=>m.sh).length;
  $('st1').textContent=KEYERR?'Chiave errata o mancante: inseriscila nelle impostazioni in fondo alla pagina':!DATA.matches.length?'Tocca "Aggiorna quote" per caricare i match':n<k.length?`Spread trovati: ${n}/${k.length}`:'';
- $('st2').textContent=sv?`PPG del ${sv.date}${sv.date!==today()?' (non di oggi: aggiorna la lista)':''} · abbinati ${P.filter((p,i)=>p&&DATA.matches[i].kind===TAB).length} su ${k.length}`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
+ const kk=DATA.matches.map((m,i)=>[m,P[i]]).filter(([m])=>m.kind===TAB),hid=kk.filter(([m])=>HID.has(m.league)).length,wp=kk.filter(([m,p])=>p&&!HID.has(m.league)).length,mt=new Set(P.filter(Boolean).map(p=>p._i));
+ $('st2').innerHTML=sv?`${kk.length} match su asianbetsoccer · ${hid} nascosti · ${wp} con PPG<br>Lista PPG del ${esc(sv.date)}${sv.date!==today()?' (non di oggi: aggiorna)':''}: ${L.length} match, ${mt.size} presenti su asianbetsoccer`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
 const apiPpg=()=>(store.get('srv')||'/api/refresh').replace(/\/api\/refresh.*$/,'/api/ppg');
 const hdr=()=>({'Content-Type':'application/json','X-Key':store.get('key')||''});
 let KEYERR=false;
