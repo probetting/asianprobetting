@@ -38,6 +38,7 @@ textarea{height:90px}
 .odds{display:grid;grid-template-columns:70px 1fr 1fr;gap:6px 8px;font:700 12px 'Nunito',sans-serif;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:10px}
 .odds .l,.odds .h{color:var(--muted)}
 details{margin-top:8px}
+a{color:var(--accent)}
 #out{display:flex;flex-direction:column;gap:16px}
 .lgx{background:none;border:0;color:var(--muted);font-size:12px;padding:0 0 0 8px;cursor:pointer}
 .hrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:13px}
@@ -50,9 +51,10 @@ details{margin-top:8px}
 <div id=pdw hidden><p class=sub>Giorno delle partite passate</p><input type=date id=pd></div>
 <p class=sub id=st1></p><p class=sub id=st2></p>
 <button class=lnk id=paste>Incolla lista PPG</button>
+<p class=sub>Raccogli i dati: <a href="https://probettinghub.com/it/pro-finder">probettinghub</a> · <a href="https://www.asianbetsoccer.com/livescore.html">asianbetsoccer</a></p>
 <div id=box hidden><textarea id=ta placeholder="Incolla qui la lista copiata da probettinghub"></textarea><button class=refresh id=ok style="width:100%;margin-top:8px">Usa lista</button></div>
 <div id=out></div>
-<details><summary class=sub id=hds>Campionati nascosti (0)</summary><div id=hl></div></details>
+<details><summary class=sub id=hds>Campionati nascosti (0)</summary><div id=hl></div><textarea id=hx hidden readonly style="margin-top:8px"></textarea></details>
 <details><summary class=sub>Impostazioni</summary><p class=sub style="margin-top:8px">Indirizzo del server</p><input type=text id=srv placeholder="/api/refresh"><p class=sub style="margin-top:8px">Chiave segreta</p><input type=password id=key autocomplete=off><button class=lnk id=sv style="margin-top:8px">Salva</button></details>
 </div>
 <script>
@@ -63,13 +65,18 @@ const STOP=new Set(['fc','cf','sc','ac','afc','fk','cd','ud','de','the','club','
 const norm=n=>{let s=n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\(w\)|\bwomen\b|\bfemminile\b/g,' w ')
  .replace(/([a-z])(u\d\d)\b/g,'$1 $2').replace(/\bu[ -]?(\d\d)\b/g,' u$1 ').replace(/[^a-z0-9 ]/g,' ');
  const t=s.split(/\s+/).filter(Boolean).map(w=>({b:'ii','2':'ii',res:'ii',reserves:'ii'}[w]||w)),k=t.filter(w=>!STOP.has(w));return (k.length?k:t).join(' ')};
-const NC=new Map(),nn=s=>{let v=NC.get(s);if(v===undefined){v=norm(s);NC.set(s,v)}return v};
-function sim(a,b){a=nn(a);b=nn(b);if(a===b)return 1;const A=a.split(' '),B=b.split(' '),[s,l]=A.length<=B.length?[A,B]:[B,A];
+const NC=new Map(),nn=s=>{let v=NC.get(s);if(v===undefined){const q=norm(s),w=q.split(' ');v={s:q,t:w,g:w.filter(x=>/^(u\d\d|w|ii)$/.test(x)).sort().join(',')};NC.set(s,v)}return v};
+function sim(a,b){a=nn(a);b=nn(b);if(a.s===b.s)return 1;if(a.g!==b.g)return 0;const [s,l]=a.t.length<=b.t.length?[a.t,b.t]:[b.t,a.t];
  if(s.length&&s.length<l.length&&s.every(w=>l.includes(w))&&s.some(w=>w.length>=4)&&l.filter(w=>!s.includes(w)).every(w=>!/^(u\d\d|ii|w)$/.test(w)))return .9;
- const m=a.length,n=b.length;if(!m||!n||Math.abs(m-n)>Math.max(m,n)*.2)return 0;let p=Array.from({length:n+1},(_,j)=>j);
- for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return 1-p[n]/Math.max(m,n)}
-function find(m,L){let b=null,t=.7999;const tr=(p,sw)=>{const s1=sim(m.home,sw?p.away:p.home);if(s1<t)return;const s=Math.min(s1,sim(m.away,sw?p.home:p.away));if(s>t){b=sw?{...p,ph:p.pa,pa:p.ph}:p;t=s}};
- for(const p of L){tr(p,0);tr(p,1)}return b}
+ const x=a.s,y=b.s,m=x.length,n=y.length;if(!m||!n||Math.abs(m-n)>Math.max(m,n)*.2||(x[0]!==y[0]&&!a.t.some(w=>b.t.includes(w))))return 0;let p=Array.from({length:n+1},(_,j)=>j);
+ for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(x[i-1]===y[j-1]?0:1));p=c}return 1-p[n]/Math.max(m,n)}
+function matchAll(ms,L){const c=[];
+ ms.forEach((m,i)=>L.forEach((p,j)=>{for(const sw of [0,1]){const x=sim(m.home,sw?p.away:p.home),y=sim(m.away,sw?p.home:p.away),hi=Math.max(x,y),lo=Math.min(x,y);
+  if(hi>=.8)c.push({i,j,sw,part:lo<.8,k:lo>=.8?2+lo:1+hi+lo*.01})}}));
+ c.sort((a,b)=>b.k-a.k);const mi=new Set(),pj=new Set(),P=new Array(ms.length).fill(null);
+ for(const e of c){if(mi.has(e.i)||pj.has(e.j))continue;mi.add(e.i);pj.add(e.j);const p=L[e.j];P[e.i]=e.sw?{...p,ph:p.pa,pa:p.ph,part:e.part}:{...p,part:e.part}}
+ return P}
+let PC={k:'',P:[]};
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let DATA=store.get('data')||SNAP,TAB=store.get('tab')||'live',ONLY=store.get('onlyp')===true,HID=new Set(store.get('hid')||[]);
 const cards=(y,r)=>(y?' 🟨'+y:'')+(r?' 🟥'+r:'');
@@ -78,7 +85,7 @@ function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),k=m.kind,fin=k==='past'||(k==='
  const badge=fin?'FINITA':k==='live'?'LIVE '+esc(m.when):esc(m.when);
  const hasS=k!=='next'&&m.hg!==''&&m.hg!=null;
  const score=hasS?`<div class=score>Parziale ${m.ht&&m.ht!=='-'?esc(m.ht):'–'} · ${fin?'Finale':'Attuale'} ${esc(m.hg)}-${esc(m.ag)}</div>`:'';
- const pp=v=>p&&v!=null?`<span class=ppg>PPG ${esc(v)}</span>`:'<span class="ppg na">PPG –</span>';
+ const pp=v=>p&&v!=null?`<span class=ppg${p.part?' title="abbinato con una sola squadra"':''}>PPG ${esc(v)}${p.part?' ≈':''}</span>`:'<span class="ppg na">PPG –</span>';
  return `<div class=card><div class=meta><span>${esc(m.league)}${k==='past'?' · '+esc(m.when):''}<button class=lgx data-hide="${esc(m.league)}" title="Nascondi questo campionato">✕</button></span><span class=badge>${badge}</span></div>
 <div class=team><b>${esc(m.home)}${cards(m.hy,m.hr)}</b>${pp(p&&p.ph)}</div>
 <div class=team><b>${esc(m.away)}${cards(m.ay,m.ar)}</b>${pp(p&&p.pa)}</div>${score}
@@ -86,7 +93,9 @@ function card(m,p){const ho=sp(m.sh),ao=sp(m.sa),k=m.kind,fin=k==='past'||(k==='
 <span class=l>Spread 1</span><span>${ho[0]}</span><span>${ho[1]}</span>
 <span class=l>Spread 2</span><span>${ao[0]}</span><span>${ao[1]}</span>
 <span class=l>1 X 2</span><span>${esc((m.x_op||[]).join(' · ')||'–')}</span><span>${esc((m.x_cu||[]).join(' · ')||'–')}</span></div></div>`}
-function draw(){const sv=store.get('ppg'),L=sv?sv.matches.map((p,i)=>({...p,_i:i})):[],P=DATA.matches.map(m=>find(m,L));
+function draw(){const sv=store.get('ppg'),L=sv?sv.matches.map((p,i)=>({...p,_i:i})):[],M=DATA.matches;
+ const ck=[M.length,DATA.updated||'',sv?(sv.ts||sv.date):'',L.length,M.length?M[0].home+M[M.length-1].away:''].join('|');
+ if(PC.k!==ck)PC={k:ck,P:matchAll(M,L)};const P=PC.P;
  const shown=k=>DATA.matches.map((m,i)=>[m,P[i]]).filter(([m,p])=>m.kind===k&&!HID.has(m.league)&&(!ONLY||p));
  for(const [k,id,t] of [['live','tl','Live'],['next','tn','Next oggi'],['past','tp','Past']]){$(id).textContent=t+' ('+shown(k).length+')';$(id).className='tab'+(TAB===k?' active':'')}
  $('onlyp').checked=ONLY;$('hds').textContent='Campionati nascosti ('+HID.size+')';
@@ -96,8 +105,8 @@ function draw(){const sv=store.get('ppg'),L=sv?sv.matches.map((p,i)=>({...p,_i:i
  const u=DATA.updated;$('upd').textContent=!DATA.matches.length?'nessun dato':u?(/^\d/.test(u)?'agg. '+u:u):'dati di esempio';
  const k=DATA.matches.filter(m=>m.kind===TAB),n=k.filter(m=>m.sh).length;
  $('st1').textContent=KEYERR?'Chiave errata o mancante: inseriscila nelle impostazioni in fondo alla pagina':!DATA.matches.length?'Tocca "Aggiorna quote" per caricare i match':n<k.length?`Spread trovati: ${n}/${k.length}`:'';
- const kk=DATA.matches.map((m,i)=>[m,P[i]]).filter(([m])=>m.kind===TAB),hid=kk.filter(([m])=>HID.has(m.league)).length,wp=kk.filter(([m,p])=>p&&!HID.has(m.league)).length,mt=new Set(P.filter(Boolean).map(p=>p._i));
- $('st2').innerHTML=sv?`${kk.length} match su asianbetsoccer · ${hid} nascosti · ${wp} con PPG<br>Lista PPG del ${esc(sv.date)}${sv.date!==today()?' (non di oggi: aggiorna)':''}: ${L.length} match, ${mt.size} presenti su asianbetsoccer`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
+ const kk=DATA.matches.map((m,i)=>[m,P[i]]).filter(([m])=>m.kind===TAB),hid=kk.filter(([m])=>HID.has(m.league)).length,wp=kk.filter(([m,p])=>p&&!HID.has(m.league)).length,mt=new Set(P.filter(Boolean).map(p=>p._i)),par=kk.filter(([m,p])=>p&&p.part&&!HID.has(m.league)).length;
+ $('st2').innerHTML=sv?`${kk.length} match su asianbetsoccer · ${hid} nascosti · ${wp} con PPG${par?` (${par} con una sola squadra uguale)`:''}<br>Lista PPG del ${esc(sv.date)}${sv.date!==today()?' (non di oggi: aggiorna)':''}: ${L.length} match, ${mt.size} presenti su asianbetsoccer`:'Nessuna lista PPG: tocca "Incolla lista PPG"'}
 const apiPpg=()=>(store.get('srv')||'/api/refresh').replace(/\/api\/refresh.*$/,'/api/ppg');
 const hdr=()=>({'Content-Type':'application/json','X-Key':store.get('key')||''});
 let KEYERR=false;
@@ -119,19 +128,25 @@ async function refresh(){const base=store.get('srv')||'/api/refresh',past=TAB===
 $('paste').onclick=async()=>{try{setList(await navigator.clipboard.readText())}catch(e){$('box').hidden=false}};
 $('ok').onclick=()=>{try{setList($('ta').value);$('box').hidden=true;$('ta').value=''}catch(e){alert('Lista non valida')}};
 $('out').onclick=e=>{const b=e.target.closest&&e.target.closest('[data-hide]');if(!b)return;HID.add(b.dataset.hide);store.set('hid',[...HID]);draw()};
-$('hl').onclick=e=>{const b=e.target.closest&&e.target.closest('button');if(!b)return;if(b.dataset.showall)HID.clear();else HID.delete(b.dataset.show);store.set('hid',[...HID]);draw()};
+async function copyHid(){const txt=JSON.stringify([...HID].sort());try{await navigator.clipboard.writeText(txt);$('st1').textContent='Elenco copiato: incollalo in chat'}catch(e){$('hx').hidden=false;$('hx').value=txt;if($('hx').select)$('hx').select();$('st1').textContent='Copia non permessa: seleziona il testo nella casella'}}
+$('hl').onclick=e=>{const b=e.target.closest&&e.target.closest('button');if(!b)return;if(b.dataset.copy){copyHid();return}if(b.dataset.showall)HID.clear();else HID.delete(b.dataset.show);store.set('hid',[...HID]);draw()};
 $('onlyp').onchange=()=>{ONLY=$('onlyp').checked;store.set('onlyp',ONLY);draw()};
 $('tabs').onclick=e=>{const k=e.target.dataset.k;if(!k)return;TAB=k;store.set('tab',k);draw();if(k==='past'&&!DATA.matches.some(m=>m.kind==='past'))refresh()};
 $('srv').value=store.get('srv')||'';$('key').value=store.get('key')||'';
 $('sv').onclick=async()=>{store.set('srv',$('srv').value.trim());store.set('key',$('key').value.trim());await syncPpg();draw();if(!KEYERR)$('st1').textContent='Impostazioni salvate'};
 $('ref').onclick=refresh;
 {const y=new Date(Date.now()-864e5).toLocaleDateString('sv');$('pd').value=y;$('pd').max=y;$('pd').min='2025-01-01';$('pd').onchange=refresh}
-async function fromHash(){const m=location.hash.match(/^#ppg=([gj])(.+)$/);if(!m)return;
- try{let b=m[2].replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';
+async function fromHash(){const m=location.hash.match(/^#(ppg|asian)=([gj])(.+)$/);if(!m)return;
+ try{let b=m[3].replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';
   const bytes=Uint8Array.from(atob(b),c=>c.charCodeAt(0));
-  const txt=m[1]==='g'?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text():new TextDecoder().decode(bytes);
-  const ms=JSON.parse(txt).m.map(r=>({home:r[0],away:r[1],ph:r[2],pa:r[3]}));
-  if(ms.length){store.set('ppg',{date:today(),ts:Date.now(),matches:ms});await pushPpg()}}catch(e){}
+  const txt=m[2]==='g'?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text():new TextDecoder().decode(bytes);
+  const d=JSON.parse(txt);
+  if(m[1]==='ppg'){const ms=d.m.map(r=>({home:r[0],away:r[1],ph:r[2],pa:r[3]}));
+   if(ms.length){store.set('ppg',{date:today(),ts:Date.now(),matches:ms});await pushPpg()}}
+  else{const S=d.s||(d.k&&d.m&&d.m.length?{[d.k]:d.m}:null),ks=S?Object.keys(S).filter(k=>Array.isArray(S[k])):[];
+   if(ks.length){DATA={matches:DATA.matches.filter(x=>!ks.includes(x.kind)).concat(...ks.map(k=>S[k].map(x=>({...x,kind:k})))),updated:new Date().toLocaleTimeString('it',{hour:'2-digit',minute:'2-digit'})};
+    store.set('data',DATA);TAB=ks.includes('live')&&S.live.length?'live':ks.includes('next')?'next':ks[0];store.set('tab',TAB)}}}catch(e){}
  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+window.addEventListener('storage',e=>{if(!['data','ppg','hid','tab','onlyp'].includes(e.key))return;DATA=store.get('data')||DATA;HID=new Set(store.get('hid')||[]);ONLY=store.get('onlyp')===true;TAB=store.get('tab')||TAB;draw()});
 draw();fromHash().then(async()=>{await syncPpg();draw()},draw);
 </script></body></html>
